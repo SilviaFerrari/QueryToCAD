@@ -1,7 +1,37 @@
 import os
-import cadquery as cq
-from ai_engine import generate_cad_code
+import time                     # to time the llm's production times
+import pandas                   # standard for managing tables in python
+import cadquery as cq           # CAD engine
+from datatime import datetime   # timestamp for each test
+
 from ai_engine import AI_MODEL
+from ai_engine import generate_cad_code
+
+LLM_MODELS = [
+    "openai/gpt-4o",
+    "anthropic/claude-sonnet-4.5",
+    "anthropic/claude-opus-4.5",
+    "meta-llama/llama-3.3-70b-instruct"
+    ]
+
+EXCEL_FILE = "output/performance.xlsx"
+
+def save_to_excel(obj_data):
+
+    # we pass the object data dictionary into a list to prevent pandas from getting confused
+    new_df = pandas.DataFrame([obj_data])
+    
+    if os.path.exist(EXCEL_FILE):
+        # read the entire file
+        existing_df = pandas.read_excel(EXCEL_FILE)
+        # create a history of changes, discarding old row/column index
+        final_df = pandas.concat([existing_df, new_df], ignore_index = True)
+    else:
+        final_df = new_df 
+    
+    # it write the file to disk without the row number column
+    final_df.to_excel(EXCEL_FILE, index = False) 
+    print(f"Excel file updated successfully: {EXCEL_FILE}")
 
 # creating output folder
 if not os.path.exists(f"output/{AI_MODEL}"):
