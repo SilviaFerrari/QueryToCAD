@@ -3,7 +3,7 @@ import time                     # to time the llm's production times
 import cadquery as cq           # CAD engine
 
 import config
-from config import OUTPUT_DIR
+from config import OUTPUT_DIR, Colors as C
 from api_engine import generate_cad_code
 from excel_engine import save_to_excel, init_run_data
 from geometrical_analysis import analyze_geometry
@@ -11,56 +11,56 @@ from geometrical_analysis import analyze_geometry
 if not os.path.exists(f"{OUTPUT_DIR}"):
     os.makedirs(f"{OUTPUT_DIR}")
 
+def create_output_folder(output_dir, model_name, name_base):
+    # creating llm {OUTPUT_DIR} folder
+    if not os.path.exists(f"{output_dir}/{model_name}"):
+        os.makedirs(f"{output_dir}/{model_name}")
+    
+    # creating project folder with object version check
+    version = 1
+    while True:
+        complete_project_name = name_base + "_v" + str(version)
+        if not os.path.exists(f"{output_dir}/{model_name}/{complete_project_name}"):
+            os.makedirs(f"{output_dir}/{model_name}/{complete_project_name}")
+            break
+        else:
+            version += 1
+    return complete_project_name
+
 def main():
     # user's interaction
-    print("--- QUERYtoCAD v1.0 ---")
+    print(f"\n{C.HEADER}# --- QueryToCAD v1.1 --- #{C.END}\n")
     user_input = input("Scrivi cosa vuoi modellare > ")
     project_name_base = input("Nome del file del progetto > ")
 
-    # ------ DIRECOTRY ORGANIZATION ------ #
-
     # this loop makes all LLM models to generate the requested object
     for model in config.LLM_MODELS:
-        print(f"\n\nTESTING MODEL: {model["name"]}\n")
-
-        # creating llm {OUTPUT_DIR} folder
-        if not os.path.exists(f"{OUTPUT_DIR}/{model["name"]}"):
-            os.makedirs(f"{OUTPUT_DIR}/{model["name"]}")
         
-        # creating project folder with object version check
-        version = 1
-        while True:
-            project_name = project_name_base + "_v" + str(version)
-            if not os.path.exists(f"{OUTPUT_DIR}/{model["name"]}/{project_name}"):
-                os.makedirs(f"{OUTPUT_DIR}/{model["name"]}/{project_name}")
-                break
-            else:
-                version += 1
-
-        # ------ API CALL ------ #
+        print(f"\n\n{C.BOLD}TESTING MODEL: {model["name"]}{C.END}\n")
+        project_name = create_output_folder(OUTPUT_DIR, model["name"], project_name_base)
 
         # dictionary for excel data
         run_data = init_run_data(model["name"], project_name, user_input)
 
-        print("\nRichista inviata all'IA...")
+        print(f"{C.CYAN}Sending request to IA...{C.END}")
         start_gen = time.time()    # generation stopwatch
 
         try:
             generated_code = generate_cad_code(user_input, model["orcode"]) # API call
             run_data["Gen_Time_s"] = round(time.time() - start_gen, 2)      # time calculation
-            print("\nSUCCESS: code generated successfully!\n")
+            print(f"{C.GREEN}SUCCESS: code generated successfully!{C.END}")
 
         except Exception as e:
             run_data["Status"] = "API_ERROR"    # error notification
             run_data["Error_Log"] = str(e)      # error annotation
             save_to_excel(run_data)
-            print(f"\nWARNING: API error occurred.\n")
+            print(f"\n{C.YELLOW}WARNING: API error occurred.{C.END}\n")
             continue
 
         if not generated_code:
             run_data["Status"] = "GENERATION_FAIL"
             save_to_excel(run_data)
-            print(f"\nWARNING: generation error occurred.\n")
+            print(f"{C.YELLOW}WARNING: generation error occurred.{C.END}")
             continue
 
         # saving the code and the prompt
@@ -75,7 +75,7 @@ def main():
 
         # ------ GEOMETRIC ENGINE ------ #
 
-        print("Code sent to the geometry engine: processing the model...")
+        print(f"{C.CYAN}Code sent to the geometry engine: processing the model...{C.END}")
         start_exec = time.time() # execution stopwatch
         
         # local dictionary for AI code variable
@@ -102,23 +102,23 @@ def main():
                     run_data["Status"] = "SUCCESS"
                     step_file = f"{OUTPUT_DIR}/{model["name"]}/{project_name}/{project_name}.step" 
                     cq.exporters.export(part, step_file) 
-                    print(f"\nSUCCESS: .step project correctly saved in {step_file}")
+                    print(f"{C.GREEN}SUCCESS: .step project correctly saved in {step_file}{C.END}")
                 else:
                     run_data["Status"] = "EMPTY_GEOMETRY"
                     
             else:
                 run_data["Status"] = "NO_RESULT_VAR"
                 run_data["Error_Log"] = "Missing variable 'result'"
-                print(f"ERROR: {model["name"]} generated the code, but did not create the 'result' variable.")
+                print(f"{C.RED}ERROR: {model["name"]} generated the code, but did not create the 'result' variable.{C.END}")
                 
         except Exception as e:
             run_data["Status"] = "EXEC_ERROR"
             run_data["Error_Log"] = str(e)
-            print(f"\nERROR: something went wrong while running the geometry engine.\n{e}")
+            print(f"{C.RED}ERROR: something went wrong while running the geometry engine.\n{e}{C.END}")
 
         save_to_excel(run_data)
 
-    print("\n--- BENCHMARK COMPLETED ---")
+    print(f"\n{C.HEADER}# --- BENCHMARK COMPLETED --- #{C.END}\n")
 
 if __name__ == "__main__":
     main()

@@ -50,5 +50,5 @@ def generate_cad_code(user_prompt, model_orcode):
         code = code.replace("```python", "").replace("```", "").strip()
         return code
     except Exception as e:
-        print(f"Errore AI: {e}")
+        print(f"{C.RED}ERROR: something went wrong during code generation.\n{e}{C.END}")
         return None
