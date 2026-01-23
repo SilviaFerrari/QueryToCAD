@@ -2,7 +2,7 @@ import os
 import time                     # to time the llm's production times
 import pandas                   # standard for managing tables in python
 import cadquery as cq           # CAD engine
-from datatime import datetime   # timestamp for each test
+from datetime import datetime   # timestamp for each test
 from ai_engine import generate_cad_code
 
 LLM_MODELS = [
@@ -108,11 +108,13 @@ def main():
     # user's interaction
     print("--- QUERYtoCAD v1.0 ---")
     user_input = input("Scrivi cosa vuoi modellare > ")
-    project_name = input("Nome del file del progetto > ")
+    project_name_base = input("Nome del file del progetto > ")
+
+    # ------ DIRECOTRY ORGANIZATION ------ #
 
     # this loop makes all LLM models to generate the requested object
     for model in LLM_MODELS:
-        print(f"\nTesting Model: {model["name"]}...")
+        print(f"\n\nTESTING MODEL: {model["name"]}\n")
 
         # creating llm output folder
         if not os.path.exists(f"output/{model["name"]}"):
@@ -121,19 +123,18 @@ def main():
         # creating project folder with object version check
         version = 1
         while True:
+            project_name = project_name_base + "_v" + str(version)
             if not os.path.exists(f"output/{model["name"]}/{project_name}"):
-                project_name = project_name + "_v" + str(version)
                 os.makedirs(f"output/{model["name"]}/{project_name}")
                 break
             else:
                 coutenr += 1
-                project_name = project_name + "_v" + str(version)
 
         # dictionary for excel data
         run_data = {
             "Timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-            "Model": model_name,
-            "Project_Name": project_name_base,
+            "Model": model["name"],
+            "Project_Name": project_name,
             "Prompt": user_input,
             "Status": "PENDING",
             "Gen_Time_s": 0,
@@ -143,8 +144,10 @@ def main():
             "Error_Log": ""
         }
 
+        # ------ API CALL ------ #
+
         print("\nRichista inviata all'IA...")
-        start_gen = time.start()    # timer start
+        start_gen = time.time()    # generation stopwatch
 
         try:
             generated_code = generate_cad_code(user_input, model["orcode"]) # API call
@@ -171,27 +174,52 @@ def main():
             f.write(f"# User prompt: {user_input}\n\n") 
             f.write(generated_code)
 
-    print("\n2. Codice inviato al motore geometrico.")
-    
-    # local dictionary for AI's code variable
-    local_vars = {}
-    
-    try:
-        # dinamically executing the code (testing purpose only)
-        exec(generated_code, globals(), local_vars)
+        # counting code lines
+        run_data["Code_Lines"] = len(generated_code.splitlines())
+
+        # ------ GEOMETRIC ENGINE ------ #
+
+        print("Code sent to the geometry engine: processing the model...")
+        start_exec = time.time() # execution stopwatch
         
-        # searching for "result" variable created by AI
-        if "result" in local_vars:
-            part = local_vars["result"]
-            # exporting the output
-            filename = f"output/{AI_MODEL}/{project_name}/{project_name}.step" 
-            cq.exporters.export(part, filename) 
-            print(f"\nSUCCESS! File salvato in: {filename}")
-        else:
-            print("Errore: L'IA ha generato codice, ma non ha creato la variabile 'result'.")
+        # local dictionary for AI code variable
+        # otherwise it would get mixed up with main.py variables
+        local_vars = {}
+        
+        try:
+            # dinamically executing the code (testing purpose only)
+            exec(generated_code, globals(), local_vars)
+            run_data["Exec_Time_s"] = round(time.time() - start_exec, 2)
             
-    except Exception as e:
-        print(f"Errore durante l'esecuzione del codice geometrico:\n{e}")
+            # searching for "result" variable created by AI
+            if "result" in local_vars:
+                part = local_vars["result"]
+
+                # ------ GEOMETRICAL ANALYSIS ------ #
+
+                geom_stats = analyze_geometry(part)
+                run_data["Volume_mm3"] = round(geom_stats["volume"], 2) # round to 2 decimal places instead of 15
+                run_data["Faces_Count"] = geom_stats["faces"]
+
+                # volume validity check and output export
+                if run_data["Volume_mm3"] > 0:
+                    run_data["Status"] = "SUCCESS"
+                    step_file = f"output/{model["name"]}/{project_name}/{project_name}.step" 
+                    cq.exporters.export(part, step_file) 
+                    print(f"\nSUCCESS: .step project correctly saved in {step_file}")
+                else:
+                    run_data["Status"] = "EMPTY_GEOMETRY"
+            else:
+                run_data["Status"] = "NO_RESULT_VAR"
+                run_data["Error_Log"] = "Missing variable 'result'"
+                print(f"ERROR: {model["name"]} generated the code, but did not create the 'result' variable.")
+                
+        except Exception as e:
+            run_data["Sttus"] = "EXEC_ERROR"
+            run_data["Error_Log"] = str(e)
+            print(f"\nERROR: something went wrong while running the geometry engine.\n{e}")
+
+    print("\n--- BENCHMARK COMPLETED ---")
 
 if __name__ == "__main__":
     main()

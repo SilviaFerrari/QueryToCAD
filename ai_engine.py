@@ -43,10 +43,10 @@ def generate_cad_code(user_prompt, model_orcode):
             ],
         )
         
-        # estraiamo dal file json solo il codice che ci interessa
+        # extracting only the code we're interested in from the json file
         code = completion.choices[0].message.content
 
-        # pulizia base del codice per togliere eventuali markdown problematici
+        # basic code cleanup to remove any problematic markdowns
         code = code.replace("```python", "").replace("```", "").strip()
         return code
     except Exception as e:
