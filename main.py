@@ -37,9 +37,9 @@ def save_to_excel(obj_data):
 
     # save file retry logic
     max_retries = 5
-    for attempt in renge(max_retries):
+    for attempt in range(max_retries):
         try:    
-            if os.path.exist(EXCEL_FILE):
+            if os.path.exists(EXCEL_FILE):
                 # read the entire file
                 existing_df = pandas.read_excel(EXCEL_FILE)
                 # create a history of changes, discarding old row/column index
@@ -128,7 +128,7 @@ def main():
                 os.makedirs(f"output/{model["name"]}/{project_name}")
                 break
             else:
-                coutenr += 1
+                version += 1
 
         # dictionary for excel data
         run_data = {
@@ -215,9 +215,11 @@ def main():
                 print(f"ERROR: {model["name"]} generated the code, but did not create the 'result' variable.")
                 
         except Exception as e:
-            run_data["Sttus"] = "EXEC_ERROR"
+            run_data["Status"] = "EXEC_ERROR"
             run_data["Error_Log"] = str(e)
             print(f"\nERROR: something went wrong while running the geometry engine.\n{e}")
+
+        save_to_excel(run_data)
 
     print("\n--- BENCHMARK COMPLETED ---")
 
