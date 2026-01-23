@@ -3,8 +3,6 @@ import os
 from openai import OpenAI
 from dotenv import load_dotenv # to read .env files (API key)
 
-AI_MODEL = "anthropic/claude-3.5-sonnet"
-
 # to load the key from the .env file
 load_dotenv()
 
@@ -34,11 +32,11 @@ REGOLE TASSATIVE:
 """
 
 # process the user's request
-def generate_cad_code(user_prompt):
+def generate_cad_code(user_prompt, model_orcode):
     try:
         # call to OpenRouter
         completion = client.chat.completions.create(
-            model = AI_MODEL, # chosen model
+            model = model_orcode, # chosen model
             messages=[
                 {"role": "system", "content": MAIN_PROMPT},
                 {"role": "user", "content": user_prompt},

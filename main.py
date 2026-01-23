@@ -3,16 +3,29 @@ import time                     # to time the llm's production times
 import pandas                   # standard for managing tables in python
 import cadquery as cq           # CAD engine
 from datatime import datetime   # timestamp for each test
-
-from ai_engine import AI_MODEL
 from ai_engine import generate_cad_code
 
 LLM_MODELS = [
-    "openai/gpt-4o",
-    "anthropic/claude-sonnet-4.5",
-    "anthropic/claude-opus-4.5",
-    "meta-llama/llama-3.3-70b-instruct"
-    ]
+    {
+        "name": "gpt-4o",
+        "orcode": "openai/gpt-4o"
+    },
+    {
+        "name": "claude-sonnet-4.5",
+        "orcode": "anthropic/claude-sonnet-4.5"
+    },   
+    {
+        "name": "claude-opus-4.5",
+        "orcode": "anthropic/claude-opus-4.5"
+    },  
+    {
+        "name": "llama-3.3-70b-instruct",
+        "orcode": "meta-llama/llama-3.3-70b-instruct"
+    }
+]
+
+if not os.path.exists(f"output"):
+    os.makedirs(f"output")
 
 EXCEL_FILE = "output/performance.xlsx"
 
@@ -91,35 +104,72 @@ def analyze_geometry(cq_object):
         "faces": total_faces
     }
 
-# creating output folder
-if not os.path.exists(f"output/{AI_MODEL}"):
-    os.makedirs(f"output/{AI_MODEL}")
-
 def main():
     # user's interaction
     print("--- QUERYtoCAD v1.0 ---")
     user_input = input("Scrivi cosa vuoi modellare > ")
-    project_name = input("Nomina il file su cui verrà salvato il progetto > ")
-    os.makedirs(f"output/{AI_MODEL}/{project_name}")
+    project_name = input("Nome del file del progetto > ")
 
-    # calling API
-    print("\n1. Richista inviata all'IA.")
-    generated_code = generate_cad_code(user_input)
+    # this loop makes all LLM models to generate the requested object
+    for model in LLM_MODELS:
+        print(f"\nTesting Model: {model["name"]}...")
 
-    if not generated_code:
-        print("Errore nella generazione del codice.")
-        return
+        # creating llm output folder
+        if not os.path.exists(f"output/{model["name"]}"):
+            os.makedirs(f"output/{model["name"]}")
+        
+        # creating project folder with object version check
+        version = 1
+        while True:
+            if not os.path.exists(f"output/{model["name"]}/{project_name}"):
+                project_name = project_name + "_v" + str(version)
+                os.makedirs(f"output/{model["name"]}/{project_name}")
+                break
+            else:
+                coutenr += 1
+                project_name = project_name + "_v" + str(version)
 
-    print("\n--- CODICE GENERATO ---")
-    print(generated_code)
-    print("\n")
+        # dictionary for excel data
+        run_data = {
+            "Timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            "Model": model_name,
+            "Project_Name": project_name_base,
+            "Prompt": user_input,
+            "Status": "PENDING",
+            "Gen_Time_s": 0,
+            "Exec_Time_s": 0,
+            "Volume_mm3": 0,
+            "Faces_Count": 0,
+            "Error_Log": ""
+        }
 
-    # saving the code
-    script_filename = f"output/{AI_MODEL}/{project_name}/{project_name}_code.py"
-    with open(script_filename, "w", encoding="utf-8") as f:
-        f.write(f"# Prompt Utente: {user_input}\n") # salvo anche il prompt correlato
-        f.write(f"# Modello AI: {AI_MODEL}\n\n") # salvo il modello usato
-        f.write(generated_code)
+        print("\nRichista inviata all'IA...")
+        start_gen = time.start()    # timer start
+
+        try:
+            generated_code = generate_cad_code(user_input, model["orcode"]) # API call
+            run_data["Gen_Time_s"] = round(time.time() - start_gen, 2)      # time calculation
+            print("\nSUCCESS: code generated successfully!\n")
+
+        except Exception as e:
+            run_data["Status"] = "API_ERROR"    # error notification
+            run_data["Error_Log"] = str(e)      # error annotation
+            save_to_excel(run_data)
+            print(f"\nWARNING: API error occurred.\n")
+            continue
+
+        if not generated_code:
+            run_data["Status"] = "GENERATION_FAIL"
+            save_to_excel(run_data)
+            print(f"\nWARNING: generation error occurred.\n")
+            continue
+
+        # saving the code and the prompt
+        script_filename = f"output/{model["name"]}/{project_name}/{project_name}.py"
+        with open(script_filename, "w", encoding="utf-8") as f:
+            f.write(f"# LLM used: {model["name"]}\n") 
+            f.write(f"# User prompt: {user_input}\n\n") 
+            f.write(generated_code)
 
     print("\n2. Codice inviato al motore geometrico.")
     
