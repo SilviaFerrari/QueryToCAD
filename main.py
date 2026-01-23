@@ -18,20 +18,39 @@ EXCEL_FILE = "output/performance.xlsx"
 
 def save_to_excel(obj_data):
 
-    # we pass the object data dictionary into a list to prevent pandas from getting confused
+    # pass the object data dictionary into a list to prevent pandas from getting confused
     new_df = pandas.DataFrame([obj_data])
-    
-    if os.path.exist(EXCEL_FILE):
-        # read the entire file
-        existing_df = pandas.read_excel(EXCEL_FILE)
-        # create a history of changes, discarding old row/column index
-        final_df = pandas.concat([existing_df, new_df], ignore_index = True)
-    else:
-        final_df = new_df 
-    
-    # it write the file to disk without the row number column
-    final_df.to_excel(EXCEL_FILE, index = False) 
-    print(f"Excel file updated successfully: {EXCEL_FILE}")
+
+    # save file retry logic
+    max_retries = 5
+    for attempt in renge(max_retries):
+        try:    
+            if os.path.exist(EXCEL_FILE):
+                # read the entire file
+                existing_df = pandas.read_excel(EXCEL_FILE)
+                # create a history of changes, discarding old row/column index
+                final_df = pandas.concat([existing_df, new_df], ignore_index = True)
+            else:
+                final_df = new_df 
+        
+            # write the file to disk without the row number column
+            final_df.to_excel(EXCEL_FILE, index = False) 
+            print(f"Excel file updated successfully: {EXCEL_FILE}")
+            return
+        
+        # if we try to edit the excel file while it's open, an error will occur
+        except PermissionError:
+            print(f"""
+            WARNING: the excel file '{EXCEL_FILE}' seems to be open!\n
+            Please close it within 5 second, otherwise all data will be lost.\n
+            Attempt {attempt+1}/{max_retries}.
+            """)
+
+        except Exception as e:
+            print(f"An unexpected error occurred while saving file: {e}")
+            break
+        
+    print("UNABLE TO SAVE TO EXCEL. The data from this run is lost or only printed to screen.")
 
 # creating output folder
 if not os.path.exists(f"output/{AI_MODEL}"):
