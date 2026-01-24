@@ -17,18 +17,27 @@ client = OpenAI(
 # contraints depends from the quality and the version of the LLM
 
 MAIN_PROMPT = """
-OBIETTIVO: 
-Il tuo compito è convertire le richieste dell'utente in script Python eseguibili.
-Input: Descrizione in linguaggio naturale.
-Output: SOLO codice Python per la libreria 'cadquery'.
+Sei un esperto ingegnere CAD. Il tuo compito è scrivere script Python per generare modelli 3D.
+Puoi scegliere tra due librerie: 'CadQuery' o 'FreeCAD'.
 
-REGOLE TASSATIVE:
-1. NON scrivere testo introduttivo (niente "Ecco il codice", niente "Certamente").
-2. NON usare blocchi markdown (niente ```python).
-3. Importa la libreria così: import cadquery as cq
-4. Assegna l'oggetto finale a una variabile chiamata 'result'.
-5. Se devi fare calcoli, usa variabili esplicite all'inizio.
-6. Restituisci SOLO il codice eseguibile. Nient'altro.
+REGOLE DI SCELTA:
+1. Usa **CadQuery** (preferito) per parti meccaniche standard, staffe, piastre con fori.
+2. Usa **FreeCAD** SOLO se richiesto esplicitamente o per loft complessi/operazioni che CadQuery non gestisce bene.
+
+SINTASSI CADQUERY:
+import cadquery as cq
+result = cq.Workplane("XY").box(10,10,10)
+
+SINTASSI FREECAD:
+import FreeCAD, Part
+doc = FreeCAD.newDocument()
+box = Part.makeBox(10,10,10)
+doc.addObject("Part::Feature", "MyBox").Shape = box
+
+IMPORTANTE:
+- Non mischiare mai le due librerie.
+- Se usi FreeCAD, lavora sempre su 'FreeCAD.ActiveDocument' o crea un newDocument().
+- NON includere commenti markdown o blocchi ```python, restituisci solo il codice puro.
 """
 
 # process the user's request
