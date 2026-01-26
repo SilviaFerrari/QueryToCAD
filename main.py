@@ -37,13 +37,13 @@ def main():
     # this loop makes all LLM models to generate the requested object
     for model in config.LLM_MODELS:
         
-        print(f"\n\n{C.BOLD}TESTING MODEL: {model["name"]}{C.END}\n")
+        print(f"\n\n{C.BOLD}{C.CYAN}TESTING MODEL: {model["name"]}{C.END}\n")
         project_name = create_output_folder(OUTPUT_DIR, model["name"], project_name_base)
 
         # dictionary for excel data
         run_data = init_run_data(model["name"], project_name, user_input)
 
-        print(f"{C.CYAN}Sending request to IA...{C.END}")
+        print(f"Sending request to IA...")
         start_gen = time.time()    # generation stopwatch
 
         try:
@@ -76,46 +76,89 @@ def main():
 
         # ------ GEOMETRIC ENGINE ------ #
 
-        print(f"{C.CYAN}Code sent to the geometry engine: processing the model...{C.END}")
+        print(f"Code sent to the geometry engine.")
         start_exec = time.time() # execution stopwatch
-        
-        # local dictionary for AI code variable
-        # otherwise it would get mixed up with main.py variables
-        local_vars = {}
-        
-        try:
-            # dinamically executing the code (aviable only for CadQuery)
-            exec(generated_code, globals(), local_vars)
+
+        # checking if AI decided to use FreeCAD
+        if "import FreeCAD" in generated_code or "import Part" in generated_code:
+            is_freecad = True
+
+        if is_freecad:
+            # saving the choosen library in excel, .step and .py file
+            run_data["Library"] = "FreeCAD" 
+            print(f"Library detected: {run_data["Library"]}")
+
+            step_file = f"{OUTPUT_DIR}/{model["name"]}/{project_name}/{project_name}.step"
+            script_path = f"{OUTPUT_DIR}/{model["name"]}/{project_name}/{project_name}.py"
+
+            success, log = run_freecad_script(script_path, step_file)
             run_data["Exec_Time_s"] = round(time.time() - start_exec, 2)
             
-            # searching for "result" variable created by AI
-            if "result" in local_vars:
-                part = local_vars["result"]
+            # if the file has been saved, it must be loaded into memory 
+            # to check the volumes and geometries with CadQuery
+            if success:
+                try:
+                    part = cq.importers.importStep(step_file)
 
-                # ------ GEOMETRICAL ANALYSIS ------ #
+                    # analyzing geometry
+                    geom_stats = analyze_geometry(part)
+                    run_data["Volume_mm3"] = round(geom_stats["volume"], 2) # round to 2 decimal places instead of 15
+                    run_data["Faces_Count"] = geom_stats["faces"]
 
-                geom_stats = analyze_geometry(part)
-                run_data["Volume_mm3"] = round(geom_stats["volume"], 2) # round to 2 decimal places instead of 15
-                run_data["Faces_Count"] = geom_stats["faces"]
+                    # volume validity check and {OUTPUT_DIR} export
+                    if run_data["Volume_mm3"] > 0:
+                        run_data["Status"] = "SUCCESS"
+                        print(f"{C.GREEN}SUCCESS: .step project correctly saved in {step_file}{C.END}")
+                    else:
+                        run_data["Status"] = "EMPTY_GEOMETRY"
 
-                # volume validity check and {OUTPUT_DIR} export
-                if run_data["Volume_mm3"] > 0:
-                    run_data["Status"] = "SUCCESS"
-                    step_file = f"{OUTPUT_DIR}/{model["name"]}/{project_name}/{project_name}.step" 
-                    cq.exporters.export(part, step_file) 
-                    print(f"{C.GREEN}SUCCESS: .step project correctly saved in {step_file}{C.END}")
-                else:
-                    run_data["Status"] = "EMPTY_GEOMETRY"
-                    
+                except Exception as e:
+                    run_data["Status"] = "ANALYSIS_FAIL"
+                    run_data["Error_Log"] = f"FreeCAD ok, ma l'importazione su CadQuery è fallita: {e}"
             else:
-                run_data["Status"] = "NO_RESULT_VAR"
-                run_data["Error_Log"] = "Missing variable 'result'"
-                print(f"{C.RED}ERROR: {model["name"]} generated the code, but did not create the 'result' variable.{C.END}")
+                run_data["Status"] = "EXEC_ERROR"
+                run_data["Error_Log"] = log[-300:]
+
+        else:
+            # local dictionary for AI code variable
+            # otherwise it would get mixed up with main.py variables
+            local_vars = {}
+            run_data["Library"] = "CadQuery"
+            print(f"Library detected: {run_data["Library"]}")
+        
+            try:
+                # dinamically executing the code (aviable only for CadQuery)
+                exec(generated_code, globals(), local_vars)
+                run_data["Exec_Time_s"] = round(time.time() - start_exec, 2)
                 
-        except Exception as e:
-            run_data["Status"] = "EXEC_ERROR"
-            run_data["Error_Log"] = str(e)
-            print(f"{C.RED}ERROR: something went wrong while running the geometry engine.\n{e}{C.END}")
+                # searching for "result" variable created by AI
+                if "result" in local_vars:
+                    part = local_vars["result"]
+
+                    # ------ GEOMETRICAL ANALYSIS ------ #
+
+                    geom_stats = analyze_geometry(part)
+                    run_data["Volume_mm3"] = round(geom_stats["volume"], 2) # round to 2 decimal places instead of 15
+                    run_data["Faces_Count"] = geom_stats["faces"]
+
+                    # volume validity check and {OUTPUT_DIR} export
+                    if run_data["Volume_mm3"] > 0:
+                        run_data["Status"] = "SUCCESS"
+                        step_file = f"{OUTPUT_DIR}/{model["name"]}/{project_name}/{project_name}.step" 
+                        cq.exporters.export(part, step_file) 
+                        print(f"{C.GREEN}SUCCESS: .step project correctly saved in {step_file}{C.END}")
+                    else:
+                        run_data["Status"] = "EMPTY_GEOMETRY"
+                        
+                else:
+                    run_data["Status"] = "NO_RESULT_VAR"
+                    run_data["Error_Log"] = "Missing variable 'result'"
+                    print(f"{C.RED}ERROR: {model["name"]} generated the code, but did not create the 'result' variable.{C.END}")
+                    
+            except Exception as e:
+                run_data["Status"] = "EXEC_ERROR"
+                run_data["Error_Log"] = str(e)
+                print(f"{C.RED}ERROR: something went wrong while running the geometry engine.\n{e}{C.END}")
 
         save_to_excel(run_data)
 

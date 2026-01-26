@@ -22,7 +22,8 @@ def init_run_data(model_name, project_name, prompt):
         "Volume_mm3": 0,
         "Faces_Count": 0,
         "Error_Log": "",
-        "Code_Lines": 0
+        "Code_Lines": 0,
+        "Library": "None"
     }
 
 # to adjust column width and row coloring based on status (SUCCESS, FAIL...)
