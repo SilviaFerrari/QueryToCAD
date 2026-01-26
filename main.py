@@ -29,12 +29,12 @@ def create_output_folder(output_dir, model_name, name_base):
     return complete_project_name
 
 def main():
-    # user's interaction
+    # --- USER INTERACTION --- #
     print(f"\n{C.HEADER}# --- QueryToCAD v1.1 --- #{C.END}\n")
     user_input = input("Scrivi cosa vuoi modellare > ")
     project_name_base = input("Nome del file del progetto > ")
 
-    # this loop makes all LLM models to generate the requested object
+    # --- LLM LOOP --- #
     for model in config.LLM_MODELS:
         
         print(f"\n\n{C.BOLD}{C.CYAN}TESTING MODEL: {model["name"]}{C.END}\n")
@@ -46,6 +46,7 @@ def main():
         print(f"Sending request to IA...")
         start_gen = time.time()    # generation stopwatch
 
+        # --- API CALL & ERROR HANDLING --- #
         try:
             generated_code = generate_cad_code(user_input, model["orcode"]) # API call
             run_data["Gen_Time_s"] = round(time.time() - start_gen, 2)      # time calculation
@@ -64,19 +65,19 @@ def main():
             print(f"{C.YELLOW}WARNING: generation error occurred.{C.END}")
             continue
 
-        # saving the code and the prompt
+        # --- SAVING CODE AND PROMPT --- #
         script_filename = f"{OUTPUT_DIR}/{model["name"]}/{project_name}/{project_name}.py"
         with open(script_filename, "w", encoding="utf-8") as f:
             f.write(f"# LLM used: {model["name"]}\n") 
             f.write(f"# User prompt: {user_input}\n\n") 
             f.write(generated_code)
 
-        # counting code lines
-        run_data["Code_Lines"] = len(generated_code.splitlines())
+        run_data["Code_Lines"] = len(generated_code.splitlines()) # counting code lines
 
         # ------ GEOMETRIC ENGINE ------ #
 
         print(f"Code sent to the geometry engine.")
+        is_freecad = False
         start_exec = time.time() # execution stopwatch
 
         # checking if AI decided to use FreeCAD
@@ -86,14 +87,23 @@ def main():
         if is_freecad:
             # saving the choosen library in excel, .step and .py file
             run_data["Library"] = "FreeCAD" 
-            print(f"Library detected: {run_data["Library"]}")
 
             step_file = f"{OUTPUT_DIR}/{model["name"]}/{project_name}/{project_name}.step"
             script_path = f"{OUTPUT_DIR}/{model["name"]}/{project_name}/{project_name}.py"
 
             success, log = run_freecad_script(script_path, step_file)
             run_data["Exec_Time_s"] = round(time.time() - start_exec, 2)
-            
+
+        else:
+            # local dictionary for AI code variable
+            # otherwise it would get mixed up with main.py variables
+            local_vars = {}
+            run_data["Library"] = "CadQuery"
+        
+        print(f"Library detected: {run_data["Library"]}")
+
+        # --- FREECAD ENGINE --- #
+        if is_freecad:            
             # if the file has been saved, it must be loaded into memory 
             # to check the volumes and geometries with CadQuery
             if success:
@@ -119,13 +129,8 @@ def main():
                 run_data["Status"] = "EXEC_ERROR"
                 run_data["Error_Log"] = log[-300:]
 
-        else:
-            # local dictionary for AI code variable
-            # otherwise it would get mixed up with main.py variables
-            local_vars = {}
-            run_data["Library"] = "CadQuery"
-            print(f"Library detected: {run_data["Library"]}")
-        
+        # --- CADQUERY ENGINE --- #
+        else:        
             try:
                 # dinamically executing the code (aviable only for CadQuery)
                 exec(generated_code, globals(), local_vars)
