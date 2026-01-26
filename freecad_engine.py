@@ -67,3 +67,39 @@ def run_freecad_script(script_path, output_step_path):
 
     except Exception as e:
         return False, f"SYSTEM ERROR: {e}"
+
+def freecad_workflow(run_data, model_name, project_name, start_exec):
+    # saving the choosen library in excel, .step and .py file
+    run_data["Library"] = "FreeCAD" 
+    print(f"Library detected: {run_data["Library"]}")
+
+    step_file = f"{OUTPUT_DIR}/{model["name"]}/{project_name}/{project_name}.step"
+    script_path = f"{OUTPUT_DIR}/{model["name"]}/{project_name}/{project_name}.py"
+
+    success, log = run_freecad_script(script_path, step_file)
+    run_data["Exec_Time_s"] = round(time.time() - start_exec, 2)
+
+    # if the file has been saved, it must be loaded into memory 
+    # to check the volumes and geometries with CadQuery
+    if success:
+        try:
+            part = cq.importers.importStep(step_file)
+
+            # analyzing geometry
+            geom_stats = analyze_geometry(part)
+            run_data["Volume_mm3"] = round(geom_stats["volume"], 2) # round to 2 decimal places instead of 15
+            run_data["Faces_Count"] = geom_stats["faces"]
+
+            # volume validity check and {OUTPUT_DIR} export
+            if run_data["Volume_mm3"] > 0:
+                run_data["Status"] = "SUCCESS"
+                print(f"{C.GREEN}SUCCESS: .step project correctly saved in {step_file}{C.END}")
+            else:
+                run_data["Status"] = "EMPTY_GEOMETRY"
+
+        except Exception as e:
+            run_data["Status"] = "ANALYSIS_FAIL"
+            run_data["Error_Log"] = f"FreeCAD ok, ma l'importazione su CadQuery è fallita: {e}"
+    else:
+        run_data["Status"] = "EXEC_ERROR"
+        run_data["Error_Log"] = log[-300:]
