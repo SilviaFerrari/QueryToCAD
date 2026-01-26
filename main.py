@@ -7,6 +7,7 @@ from config import OUTPUT_DIR, Colors as C
 from api_engine import generate_cad_code
 from excel_engine import save_to_excel, init_run_data
 from geometrical_analysis import analyze_geometry
+from freecad_engine import run_freecad_script
 
 if not os.path.exists(f"{OUTPUT_DIR}"):
     os.makedirs(f"{OUTPUT_DIR}")
@@ -83,7 +84,7 @@ def main():
         local_vars = {}
         
         try:
-            # dinamically executing the code (testing purpose only)
+            # dinamically executing the code (aviable only for CadQuery)
             exec(generated_code, globals(), local_vars)
             run_data["Exec_Time_s"] = round(time.time() - start_exec, 2)
             
