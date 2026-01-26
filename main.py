@@ -1,13 +1,13 @@
 import os
 import time                     # to time the llm's production times
+import config
 import cadquery as cq           # CAD engine
 
-import config
 from config import OUTPUT_DIR, Colors as C
-from api_engine import generate_cad_code
-from excel_engine import save_to_excel, init_run_data
-from freecad_engine import run_freecad_script
-from geometrical_analysis import analyze_geometry
+from api_engine import generate_cad_code, api_call
+from freecad_engine import run_freecad_script, freecad_workflow
+from cadquery_engine import cadquery_workflow
+from excel_engine import init_run_data, save_to_excel
 
 # creating output directory
 if not os.path.exists(f"{OUTPUT_DIR}"):
@@ -29,107 +29,9 @@ def create_output_folder(output_dir, model_name, name_base):
             version += 1
     return complete_project_name
 
-def api_call(orcode, user_input, run_data):
-    print(f"Sending request to IA...")
-    generated_code = None
-    start_gen = time.time()    # generation stopwatch
-
-    try:
-        generated_code = generate_cad_code(user_input, orcode) # API call
-        run_data["Gen_Time_s"] = round(time.time() - start_gen, 2)      # time calculation
-        print(f"{C.GREEN}SUCCESS: code generated successfully!{C.END}")
-        return generated_code
-
-    except Exception as e:
-        run_data["Status"] = "API_ERROR"    # error notification
-        run_data["Error_Log"] = str(e)      # error annotation
-        save_to_excel(run_data)
-        print(f"\n{C.YELLOW}WARNING: API error occurred.{C.END}\n")
-        return None
-
-def freecad_workflow(run_data, model_name, project_name, start_exec):
-    # saving the choosen library in excel, .step and .py file
-    run_data["Library"] = "FreeCAD" 
-    print(f"Library detected: {run_data["Library"]}")
-
-    # output directory and files
-    step_file = f"{OUTPUT_DIR}/{model_name}/{project_name}/{project_name}.step"
-    script_path = f"{OUTPUT_DIR}/{model_name}/{project_name}/{project_name}.py"
-
-    # external script execution
-    success, log = run_freecad_script(script_path, step_file)
-    run_data["Exec_Time_s"] = round(time.time() - start_exec, 2)
-
-    # if the file has been saved, it must be loaded into memory 
-    # to check the volumes and geometries with CadQuery
-    if success:
-        try:
-            # importing .step file in CadQuary
-            part = cq.importers.importStep(step_file)
-
-            # analyzing geometry
-            geom_stats = analyze_geometry(part)
-            run_data["Volume_mm3"] = round(geom_stats["volume"], 2) # round to 2 decimal places instead of 15
-            run_data["Faces_Count"] = geom_stats["faces"]
-
-            # volume validity check and {OUTPUT_DIR} export
-            if run_data["Volume_mm3"] > 0:
-                run_data["Status"] = "SUCCESS"
-                print(f"{C.GREEN}SUCCESS: .step project correctly saved in {step_file}{C.END}")
-            else:
-                run_data["Status"] = "EMPTY_GEOMETRY"
-
-        except Exception as e:
-            run_data["Status"] = "ANALYSIS_FAIL"
-            run_data["Error_Log"] = f"FreeCAD ok, ma l'importazione su CadQuery è fallita: {e}"
-    else:
-        run_data["Status"] = "EXEC_ERROR"
-        run_data["Error_Log"] = log[-300:] # last 300 characters
-
-def cadquery_workflow(run_data, generated_code, model_name, project_name, start_exec):
-
-    # dictionary for AI variable to separate them from main.py variables
-    local_vars = {}
-    run_data["Library"] = "CadQuery"
-    print(f"Library detected: {run_data["Library"]}")
-
-    try:
-        # dinamically executing the code (aviable only for CadQuery)
-        exec(generated_code, globals(), local_vars)
-        run_data["Exec_Time_s"] = round(time.time() - start_exec, 2)
-        
-        # searching for "result" variable created by AI
-        if "result" in local_vars:
-            part = local_vars["result"]
-
-            # ------ GEOMETRICAL ANALYSIS ------ #
-
-            geom_stats = analyze_geometry(part)
-            run_data["Volume_mm3"] = round(geom_stats["volume"], 2) # round to 2 decimal places instead of 15
-            run_data["Faces_Count"] = geom_stats["faces"]
-
-            # volume validity check and {OUTPUT_DIR} export
-            if run_data["Volume_mm3"] > 0:
-                run_data["Status"] = "SUCCESS"
-                step_file = f"{OUTPUT_DIR}/{model_name}/{project_name}/{project_name}.step" 
-                cq.exporters.export(part, step_file) 
-                print(f"{C.GREEN}SUCCESS: .step project correctly saved in {step_file}{C.END}")
-            else:
-                run_data["Status"] = "EMPTY_GEOMETRY"
-                
-        else:
-            run_data["Status"] = "NO_RESULT_VAR"
-            run_data["Error_Log"] = "Missing variable 'result'"
-            print(f"{C.RED}ERROR: {model_name} generated the code, but did not create the 'result' variable.{C.END}")
-            
-    except Exception as e:
-        run_data["Status"] = "EXEC_ERROR"
-        run_data["Error_Log"] = str(e)
-        print(f"{C.RED}ERROR: something went wrong while running the geometry engine.\n{e}{C.END}")
-
 def main():
     # --- USER INTERACTION --- #
-    print(f"\n{C.HEADER}# --- QueryToCAD v1.1 --- #{C.END}\n")
+    print(f"\n{C.HEADER}{C.BOLD}# --- QueryToCAD v1.1 --- #{C.END}\n")
     user_input = input("Scrivi cosa vuoi modellare > ")
     project_name_base = input("Nome del file del progetto > ")
 
@@ -181,7 +83,7 @@ def main():
 
         save_to_excel(run_data)
 
-    print(f"\n{C.HEADER}# --- BENCHMARK COMPLETED --- #{C.END}\n")
+    print(f"\n{C.HEADER}{C.BOLD}# --- BENCHMARK COMPLETED --- #{C.END}\n")
 
 if __name__ == "__main__":
     main()

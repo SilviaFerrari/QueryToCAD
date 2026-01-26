@@ -1,6 +1,10 @@
-import os
+import os, time
 import subprocess
 import config
+import cadquery as cq
+
+from config import OUTPUT_DIR, Colors as C
+from geometrical_analysis import analyze_geometry
 
 # Here we're going to lauch freecad in headless mode.
 # In order to do that, freecad needs explicit instructions to export the code.
@@ -73,9 +77,11 @@ def freecad_workflow(run_data, model_name, project_name, start_exec):
     run_data["Library"] = "FreeCAD" 
     print(f"Library detected: {run_data["Library"]}")
 
-    step_file = f"{OUTPUT_DIR}/{model["name"]}/{project_name}/{project_name}.step"
-    script_path = f"{OUTPUT_DIR}/{model["name"]}/{project_name}/{project_name}.py"
+    # output directory and files
+    step_file = f"{OUTPUT_DIR}/{model_name}/{project_name}/{project_name}.step"
+    script_path = f"{OUTPUT_DIR}/{model_name}/{project_name}/{project_name}.py"
 
+    # external script execution
     success, log = run_freecad_script(script_path, step_file)
     run_data["Exec_Time_s"] = round(time.time() - start_exec, 2)
 
@@ -83,6 +89,7 @@ def freecad_workflow(run_data, model_name, project_name, start_exec):
     # to check the volumes and geometries with CadQuery
     if success:
         try:
+            # importing .step file in CadQuary
             part = cq.importers.importStep(step_file)
 
             # analyzing geometry
@@ -102,4 +109,4 @@ def freecad_workflow(run_data, model_name, project_name, start_exec):
             run_data["Error_Log"] = f"FreeCAD ok, ma l'importazione su CadQuery è fallita: {e}"
     else:
         run_data["Status"] = "EXEC_ERROR"
-        run_data["Error_Log"] = log[-300:]
+        run_data["Error_Log"] = log[-300:] # last 300 characters

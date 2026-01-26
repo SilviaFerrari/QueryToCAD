@@ -1,9 +1,8 @@
+import os
+
 OUTPUT_DIR = "output"
 EXCEL_FILE = f"{OUTPUT_DIR}/performance.xlsx"
 FREECAD_PATH = "c:\\Program Files\\FreeCAD 1.0\\bin\\freecacmd.exe"
-
-if not os.path.exists(FREECAD_PATH):
-    print(f"{C.YELLOW}WARNING: freecadcmd.exe non trovato in {FREECAD_PATH}{C.END}")
 
 LLM_MODELS = [
     {
@@ -34,3 +33,6 @@ class Colors:
     END = '\033[0m'
     BOLD = '\033[1m'
     UNDERLINE = '\033[4m'
+
+if not os.path.exists(FREECAD_PATH):
+    print(f"{Colors.YELLOW}WARNING: freecadcmd.exe non trovato in {FREECAD_PATH}{Colors.END}")
