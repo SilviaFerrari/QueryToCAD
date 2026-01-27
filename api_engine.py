@@ -67,7 +67,7 @@ def error_prompt_composer(user_prompt, error_log, previous_code):
     return error_prompt
 
 # process the user's request and handles AI code errors
-def generate_cad_code(user_prompt, model_orcode, error_log = None, previous_code = None):
+def generate_cad_code(user_prompt, model_orcode, run_data, error_log = None, previous_code = None):
     
     if error_log and previous_code:
         final_prompt = error_prompt_composer(user_prompt, error_log, previous_code)
@@ -92,7 +92,10 @@ def generate_cad_code(user_prompt, model_orcode, error_log = None, previous_code
         return code
 
     except Exception as e:
-        print(f"{C.RED}ERROR: something went wrong during code generation.\n{e}{C.END}")
+        run_data["Status"] = "API_ERROR"    # error notification
+        run_data["Error_Log"] = str(e)      # error annotation
+        save_to_excel(run_data)
+        print(f"\n{C.YELLOW}ERROR: API error occurred.{C.END}\n")
         return None
 
 def workflow_test_manager(run_data, code):
@@ -106,51 +109,3 @@ def workflow_test_manager(run_data, code):
         cadquery_workflow()
 
     return success, exec_error
-
-# handles the API call, timer, and errors
-def api_call(orcode, user_input, run_data):
-    print(f"Sending request to IA...")
-
-    generated_code = None
-    error_log = None
-
-    for attempt in range(1, MAX_RETRIES+1):
-        print(f"\n{C.BOLD}Attempt to generate code {attempt}/{MAX_RETRIES}{C.END}")
-
-        # if it's not the first attempt, we add the error and the previus code
-        # generate_cad_code() has to check if the code works
-        try:
-            if attempt > 1:
-                generated_code = generate_cad_code(user_input, orcode, error_log, previous_code)
-            else:
-                generated_code = generate_cad_code(user_input, orcode) 
-
-            if not generated_code:
-                print(f"{C.YELLOW}ERROR: API returned empty code.{C.END}")
-                continue
-            else:            
-                print(f"{C.GREEN}SUCCESS: code generated successfully.{C.END}")
-
-        except Exception as e:
-            run_data["Status"] = "API_ERROR"    # error notification
-            run_data["Error_Log"] = str(e)      # error annotation
-            save_to_excel(run_data)
-            print(f"\n{C.YELLOW}ERROR: API error occurred.{C.END}\n")
-            return None
-
-        # if the code was successfully generated, now he have to check if it works
-        success, exec_error = workflow_test_manager(run_data, generated_code)
-
-        if success:
-            print(f"{C.GREEN}SUCCESS: code works!{C.END}")
-            return generated_code
-        else:
-            print(f"{C.YELLOW}WARNING: code failed verification.{C.END}")
-            print(f"{C.RED}Error: {exec_error[:100]}...{C.END}") # printing the first part of the error
-            error_log = exec_error
-            
-            # if it's the last attempt, we give up
-            if attempt == MAX_RETRIES:
-                print(f"{C.RED}Max retries reached. Moving on.{C.END}")
-
-    return None

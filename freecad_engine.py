@@ -72,16 +72,22 @@ def run_freecad_script(script_path, output_step_path):
     except Exception as e:
         return False, f"SYSTEM ERROR: {e}"
 
-def freecad_workflow(run_data):
+def freecad_workflow(run_data, code, testing = False):
     # saving the choosen library in excel, .step and .py file
     run_data["Library"] = "FreeCAD" 
     model_name = run_data["Model"]
     project_name = run_data["Project_Name"]
-    print(f"Library detected: {run_data["Library"]}")
+
+    if not testing:
+        print(f"Library detected: {run_data["Library"]}")
 
     # output directory and files
     step_file = f"{OUTPUT_DIR}/{model_name}/{project_name}/{project_name}.step"
     script_path = f"{OUTPUT_DIR}/{model_name}/{project_name}/{project_name}.py"
+
+    # even during test freecad need a file to read
+    with open(script_path, "w", encoding="utf-8") as f:
+        f.write(code)
 
     # external script execution
     success, log = run_freecad_script(script_path, step_file)
@@ -89,6 +95,8 @@ def freecad_workflow(run_data):
     # if the file has been saved, it must be loaded into memory 
     # to check the volumes and geometries with CadQuery
     if success:
+        if testing:
+            return True, ""
         try:
             # importing .step file in CadQuary
             part = cq.importers.importStep(step_file)
@@ -102,12 +110,16 @@ def freecad_workflow(run_data):
             if run_data["Volume_mm3"] > 0:
                 run_data["Status"] = "SUCCESS"
                 print(f"{C.GREEN}SUCCESS: .step project correctly saved in {step_file}{C.END}")
+                return True, ""
             else:
                 run_data["Status"] = "EMPTY_GEOMETRY"
+                return False, "Geometry volume is 0."
 
         except Exception as e:
             run_data["Status"] = "ANALYSIS_FAIL"
-            run_data["Error_Log"] = f"FreeCAD ok, ma l'importazione su CadQuery è fallita: {e}"
+            run_data["Error_Log"] = f"FreeCAD generated file, but CadQuery import failed: {e}"
+            return False, f"FreeCAD generated file, but CadQuery import failed: {e}"
     else:
         run_data["Status"] = "EXEC_ERROR"
         run_data["Error_Log"] = log[-300:] # last 300 characters
+        return False, log[-300:]
