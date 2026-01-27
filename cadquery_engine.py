@@ -4,17 +4,20 @@ import cadquery as cq
 from config import OUTPUT_DIR, Colors as C
 from geometrical_analysis import analyze_geometry
 
-def cadquery_workflow(run_data, generated_code, model_name, project_name, start_exec):
+
+def cadquery_workflow(run_data, generated_code,  error_correction = False):
 
     # dictionary for AI variable to separate them from main.py variables
     local_vars = {}
     run_data["Library"] = "CadQuery"
+    model_name = run_data["Model"]
+    project_name = run_data["Project_Name"]
+    
     print(f"Library detected: {run_data["Library"]}")
 
     try:
         # dinamically executing the code (aviable only for CadQuery)
         exec(generated_code, globals(), local_vars)
-        run_data["Exec_Time_s"] = round(time.time() - start_exec, 2)
         
         # searching for "result" variable created by AI
         if "result" in local_vars:

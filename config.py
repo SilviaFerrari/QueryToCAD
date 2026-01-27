@@ -1,6 +1,7 @@
 import os
 
 OUTPUT_DIR = "output"
+MAX_RETRIES = 3 # max self-recorrections retries
 EXCEL_FILE = f"{OUTPUT_DIR}/performance.xlsx"
 FREECAD_PATH = "c:\\Program Files\\FreeCAD 1.0\\bin\\freecacmd.exe"
 

@@ -72,9 +72,11 @@ def run_freecad_script(script_path, output_step_path):
     except Exception as e:
         return False, f"SYSTEM ERROR: {e}"
 
-def freecad_workflow(run_data, model_name, project_name, start_exec):
+def freecad_workflow(run_data):
     # saving the choosen library in excel, .step and .py file
     run_data["Library"] = "FreeCAD" 
+    model_name = run_data["Model"]
+    project_name = run_data["Project_Name"]
     print(f"Library detected: {run_data["Library"]}")
 
     # output directory and files
@@ -83,7 +85,6 @@ def freecad_workflow(run_data, model_name, project_name, start_exec):
 
     # external script execution
     success, log = run_freecad_script(script_path, step_file)
-    run_data["Exec_Time_s"] = round(time.time() - start_exec, 2)
 
     # if the file has been saved, it must be loaded into memory 
     # to check the volumes and geometries with CadQuery
