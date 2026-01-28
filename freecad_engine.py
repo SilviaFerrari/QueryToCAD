@@ -10,35 +10,45 @@ from geometrical_analysis import analyze_geometry
 # In order to do that, freecad needs explicit instructions to export the code.
 
 def run_freecad_script(script_path, output_step_path):
+
+    # those lines are needed because FreeCAD only read absolute path
+    # giving the relative path, FreeCAD crashes
+    abs_script_path = os.path.abspath(script_path)
+    abs_output_path = os.path.abspath(output_step_path)
+
     # create a temporary wrapper file to append an export command
     wrapper_script_path = script_path.replace(".py", "_wrapper.py")
 
     # this extra code has to be added to AI's script in the footer
     # to correctrly export the object due to AI common errors
     footer_code = f"""
-    import FreeCAD
-    import Part
-    import sys
+import FreeCAD
+import Part
+import sys
 
-    try: 
-        doc = FreeCAD.ActiveDocument
+try: 
+    doc = FreeCAD.ActiveDocument
 
-        # check to see if the document is empty
-        if not doc or not doc.Objects:
-            print(f"FREECAD_ERROR: no valid object in the document.")
-            sys.exit(1)
+    # if AI didn't create the file, we do it by hand
+    if not doc:
+        doc = FreeCAD.newDocument()
 
-        # it takes the last created object = final result
-        # this is because FreeCAD inserts the object in a history list
-        obj = doc.Objects[-1]
-
-        # native export command of FreeCAD
-        Part.export([obj], r"{output_step_path}")
-        print("FREECAD_SUCCESS: export completed.")
-
-    except Exception as e:
-        print(f"FREECAD_ERROR: {{e}}")
+    # if the file exists, it checks if it's empty
+    if not doc.Objects:
+        print(f"FREECAD_ERROR: no valid object in the document.")
         sys.exit(1)
+
+    # it takes the last created object = final result
+    # this is because FreeCAD inserts the object in a history list
+    obj = doc.Objects[-1]
+
+    # native export command of FreeCAD
+    Part.export([obj], r"{abs_output_path}")
+    print("FREECAD_SUCCESS: export completed.")
+
+except Exception as e:
+    print(f"FREECAD_ERROR: {{e}}")
+    sys.exit(1)
     """
     # reading original script
     with open(script_path, "r", encoding="utf-8") as f:
@@ -54,7 +64,9 @@ def run_freecad_script(script_path, output_step_path):
             [config.FREECAD_PATH, wrapper_script_path], # executable path
             capture_output=True,    # listen to captrue FreeCAD output
             text=True,              # it reads the output as text
-            timeout=60              # if FreeCAD blocks for more than 60sec, it kills it
+            timeout=60,             # if FreeCAD blocks for more than 60sec, it kills it
+            encoding='utf-8',       # in order to avoid external decoding character errors
+            errors='ignore'
         )
         
         # analizing FreeCAD console output
@@ -64,6 +76,9 @@ def run_freecad_script(script_path, output_step_path):
         if "FREECAD_SUCCESS" in log and os.path.exists(output_step_path):
             return True, log
         else:
+            print(f"\n{C.RED}--- FREECAD ERROR LOG START ---{C.END}")
+            print(log) 
+            print(f"{C.RED}--- FREECAD ERROR LOG END ---{C.END}\n")
             return False, log
 
     except subprocess.TimeoutExpired:
